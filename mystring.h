@@ -1,6 +1,7 @@
-#ifndef STRING_H
-#define STRING_H
+#ifndef _MY_STRING_H
+#define _MY_STRING_H
 
+#include <cstring>
 #include <crtdefs.h>
 #include <memory>
 #include <iostream>
@@ -61,6 +62,9 @@ namespace My
             m_current_lenght( _left.m_current_lenght ),
             m_is_local( _left.m_is_local )
         {
+            if( m_current_lenght == m_npos )
+                return;
+
             if( m_is_local )
             {
                 memcpy( m_local_buffer, _left.m_local_buffer, m_local_capasity );
@@ -78,6 +82,9 @@ namespace My
             m_current_lenght( _left.m_current_lenght ),
             m_is_local( _left.m_is_local )
         {
+            if( m_current_lenght == m_npos )
+                return;
+
             if( m_is_local )
             {
                 // тут проще скопировать
@@ -93,9 +100,13 @@ namespace My
         }
 
         // коструктор из с-строк
-        explicit basic_string( const _Char_T * _left ) noexcept
+        explicit basic_string( const _Char_T * _left, size_t _size = m_npos ) noexcept
         {
-            m_current_lenght = _strlen( _left );
+            m_current_lenght = ( _size != m_npos ) ? _size : _strlen( _left );
+
+            if( m_current_lenght == m_npos )
+                return;
+
             if( m_current_lenght < _local_lenght() )
             {
                 memcpy( m_local_buffer, _left, m_current_lenght * sizeof( _Char_T ) );
@@ -112,10 +123,7 @@ namespace My
         // очистка
         void reset() noexcept
         {
-            for( size_t i = 0; i < _local_lenght(); ++i )
-            {
-                m_local_buffer[i] = static_cast<_Char_T>('\0');
-            }
+            memset( m_local_buffer, static_cast<_Char_T>('\0'), m_local_capasity );
             m_buffer.release();
 
             m_is_local = true;
@@ -123,8 +131,29 @@ namespace My
 
             return;
         }
+
+        template<typename _T>
+        friend std::ostream & operator<<( std::ostream & os, const basic_string<_T> & _left );
     };
 
     using String = basic_string<char>;
+
+    template<typename _T>
+    std::ostream & operator<<( std::ostream & os, const basic_string<_T> & _left )
+    {
+        if( _left.m_current_lenght == _left.m_npos )
+            return os;
+
+        if( _left.m_is_local )
+        {
+            os << _left.m_local_buffer;
+        }
+        else
+        {
+            os << _left.m_buffer.get();
+        }
+
+        return os;
+    }
 }
-#endif // STRING_H
+#endif // _MY_STRING_H

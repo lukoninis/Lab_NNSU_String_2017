@@ -17,4 +17,4 @@ DEFINES += QT_DEPRECATED_WARNINGS
 SOURCES += main.cpp
 
 HEADERS += \
-    string.h
+    mystring.h
