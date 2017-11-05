@@ -5,6 +5,7 @@
 #include <crtdefs.h>
 #include <memory>
 #include <iostream>
+#include <stdexcept>
 
 namespace My
 {
@@ -20,7 +21,7 @@ namespace My
         // текущая длина
         size_t m_current_lenght{ m_npos };
 
-        // указатель на буффер
+        // указатель на буфер
         std::unique_ptr<_Char_T[]> m_buffer{ nullptr };
 
         // флаг для коротких строк
@@ -38,49 +39,68 @@ namespace My
             size_t m_capacity;
         };
 
-        constexpr inline size_t _strlen( const _Char_T * _buff )
+        // перемещение из локального буфера
+        void _move_from_local( const size_t _size = m_npos )
         {
-            size_t result = m_npos;
-            if( nullptr != _buff )
-            {
-                result = 0;
-                while( *_buff != static_cast<_Char_T>( '\0' ) )
-                {
-                    ++result;
-                    ++_buff;
-                }
-            }
-            return result;
+            size_t new_size = ( m_npos == _size ) ? _local_lenght() * 2 : _size;
+            m_buffer = std::make_unique<_Char_T[]>( new_size );
+            memcpy( m_buffer.get(), m_local_buffer, m_local_capasity );
+            m_is_local = false;
+            m_capacity = new_size;
+        }
+
+        // перемещение в локальный буфер
+        void _move_to_local()
+        {
+            size_t new_size = ( m_current_lenght < _local_lenght() ) ? m_current_lenght : _local_lenght();
+            memcpy( m_local_buffer, m_buffer.get(), new_size * sizeof( _Char_T ) );
+            m_is_local = true;
+            m_current_lenght = new_size;
+            m_buffer.release();
+        }
+
+        // изменение размера буфера
+        void resize_buffer( size_t _size = m_npos )
+        {
+            size_t new_size = ( m_npos == _size ) ? m_capacity * 2 : _size;
+            m_capacity = new_size;
+            std::unique_ptr<_Char_T[]> _buffer{ std::make_unique<_Char_T[]>( m_capacity ) };
+            if( nullptr != m_buffer )
+                memcpy( _buffer.get(), m_buffer.get(), m_capacity * sizeof( _Char_T ) );
+            m_buffer = std::move( _buffer );
         }
 
     public:
+        // деструктор и стандартный заработает
+        ~basic_string() = default;
+
         // конструктор по умолчанию
         explicit basic_string() noexcept {}
 
         // копирующий конструктор
-        explicit basic_string( const basic_string & _left ) noexcept:
-            m_current_lenght( _left.m_current_lenght ),
-            m_is_local( _left.m_is_local )
+        explicit basic_string( const basic_string & _right ) noexcept:
+            m_current_lenght( _right.m_current_lenght ),
+            m_is_local( _right.m_is_local )
         {
             if( m_current_lenght == m_npos )
                 return;
 
             if( m_is_local )
             {
-                memcpy( m_local_buffer, _left.m_local_buffer, m_local_capasity );
+                memcpy( m_local_buffer, _right.m_local_buffer, m_local_capasity );
             }
             else
             {
-                m_capacity = _left.m_capacity;
+                m_capacity = _right.m_capacity;
                 m_buffer = std::make_unique<_Char_T[]>( m_capacity );
-                memcpy( m_buffer.get(), _left.m_buffer.get(), m_capacity );
+                memcpy( m_buffer.get(), _right.m_buffer.get(), m_capacity * sizeof( _Char_T ) );
             }
         }
 
         // перемещающий конструктор
-        explicit basic_string( basic_string && _left ) noexcept:
-            m_current_lenght( _left.m_current_lenght ),
-            m_is_local( _left.m_is_local )
+        explicit basic_string( basic_string && _right ) noexcept:
+            m_current_lenght( _right.m_current_lenght ),
+            m_is_local( _right.m_is_local )
         {
             if( m_current_lenght == m_npos )
                 return;
@@ -88,34 +108,34 @@ namespace My
             if( m_is_local )
             {
                 // тут проще скопировать
-                memcpy( m_local_buffer, _left.m_local_buffer, m_local_capasity );
+                memcpy( m_local_buffer, _right.m_local_buffer, m_local_capasity );
             }
             else
             {
                 // а тут переместить
-                m_capacity = _left.m_capacity;
-                m_buffer = std::move( _left.m_buffer );
+                m_capacity = _right.m_capacity;
+                m_buffer = std::move( _right.m_buffer );
             }
-            _left.reset();
+            _right.reset();
         }
 
-        // коструктор из с-строк
-        explicit basic_string( const _Char_T * _left, size_t _size = m_npos ) noexcept
+        // конструктор из с-строк
+        explicit basic_string( const _Char_T * _right, size_t _size = m_npos ) noexcept
         {
-            m_current_lenght = ( _size != m_npos ) ? _size : _strlen( _left );
+            m_current_lenght = ( _size != m_npos ) ? _size : strlen( _right );
 
             if( m_current_lenght == m_npos )
                 return;
 
             if( m_current_lenght < _local_lenght() )
             {
-                memcpy( m_local_buffer, _left, m_current_lenght * sizeof( _Char_T ) );
+                memcpy( m_local_buffer, _right, m_current_lenght * sizeof( _Char_T ) );
             }
             else
             {
                 m_capacity = m_current_lenght + 1;
                 m_buffer = std::make_unique<_Char_T[]>( m_capacity );
-                memcpy( m_buffer.get(), _left, m_capacity );
+                memcpy( m_buffer.get(), _right, m_capacity * sizeof( _Char_T ) );
                 m_is_local = false;
             }
         }
@@ -130,6 +150,35 @@ namespace My
             m_current_lenght = m_npos;
 
             return;
+        }
+
+        // оператор прямого доступа
+        inline _Char_T & operator []( size_t _index )
+        {
+            if( _index > m_current_lenght )
+                throw std::out_of_range("basic_string:index out of range");
+
+            return m_is_local ? m_local_buffer[ _index ] : m_buffer[ _index ];
+        }
+
+        // оператор присваивания с копированием
+        inline basic_string & operator = ( const basic_string & _right )
+        {
+            if (this == &_right)
+            {
+                return *this;
+            }
+            reset();
+            m_is_local = _right.m_is_local;
+            m_current_lenght = _right.m_current_lenght;
+            memcpy( m_local_buffer, _right.m_local_buffer, m_local_capasity );
+
+            if( !m_is_local )
+            {
+                resize_buffer( m_capacity );
+                memcpy( m_buffer.get(), _right.m_buffer.get(), m_current_lenght * sizeof( _Char_T ) );
+            }
+            return *this;
         }
 
         template<typename _T>
