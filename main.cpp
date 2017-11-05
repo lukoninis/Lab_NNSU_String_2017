@@ -1,8 +1,7 @@
-#include <QCoreApplication>
+#include "string.h"
 
 int main(int argc, char *argv[])
 {
-    QCoreApplication a(argc, argv);
-
-    return a.exec();
+    My::String str;
+    return 0;
 }
