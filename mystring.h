@@ -78,7 +78,7 @@ namespace My
         explicit basic_string() noexcept {}
 
         // копирующий конструктор
-        explicit basic_string( const basic_string & _right ) noexcept:
+        basic_string( const basic_string & _right ) noexcept:
             m_current_lenght( _right.m_current_lenght ),
             m_is_local( _right.m_is_local )
         {
@@ -98,9 +98,9 @@ namespace My
         }
 
         // перемещающий конструктор
-        explicit basic_string( basic_string && _right ) noexcept:
-            m_current_lenght( _right.m_current_lenght ),
-            m_is_local( _right.m_is_local )
+        basic_string( basic_string && _right ) noexcept:
+            m_current_lenght( std::move( _right.m_current_lenght ) ),
+            m_is_local( std::move( _right.m_is_local ) )
         {
             if( m_current_lenght == m_npos )
                 return;
@@ -113,14 +113,14 @@ namespace My
             else
             {
                 // а тут переместить
-                m_capacity = _right.m_capacity;
+                m_capacity = std::move( _right.m_capacity );
                 m_buffer = std::move( _right.m_buffer );
             }
             _right.reset();
         }
 
         // конструктор из с-строк
-        explicit basic_string( const _Char_T * _right, size_t _size = m_npos ) noexcept
+        basic_string( const _Char_T * _right, size_t _size = m_npos ) noexcept
         {
             m_current_lenght = ( _size != m_npos ) ? _size : strlen( _right );
 
@@ -178,6 +178,57 @@ namespace My
                 resize_buffer( m_capacity );
                 memcpy( m_buffer.get(), _right.m_buffer.get(), m_current_lenght * sizeof( _Char_T ) );
             }
+            return *this;
+        }
+
+        // оператор присваивания с перемещением
+        inline basic_string & operator = ( basic_string && _right )
+        {
+            if (this == &_right)
+            {
+                return *this;
+            }
+            reset();
+            m_is_local = std::move( _right.m_is_local );
+            m_current_lenght = std::move( _right.m_current_lenght );
+            memcpy( m_local_buffer, _right.m_local_buffer, m_local_capasity );
+
+            if( !m_is_local )
+            {
+                m_buffer = std::move( _right.m_buffer );
+            }
+            _right.reset();
+            return *this;
+        }
+
+        inline basic_string operator + ( const basic_string & _right ) const
+        {
+            size_t new_size = m_current_lenght + _right.m_current_lenght;
+            std::unique_ptr<_Char_T[]> _buffer = std::make_unique<_Char_T[]>( new_size + 1 );
+            if( m_is_local )
+            {
+                memcpy( _buffer.get(), m_local_buffer, m_current_lenght );
+            }
+            else
+            {
+                memcpy( _buffer.get(), m_buffer.get(), m_current_lenght );
+            }
+
+            if( _right.m_is_local )
+            {
+                memcpy( _buffer.get() + m_current_lenght, _right.m_local_buffer, _right.m_current_lenght );
+            }
+            else
+            {
+                memcpy( _buffer.get() + m_current_lenght, _right.m_buffer.get(), _right.m_current_lenght );
+            }
+
+            return std::move( basic_string( _buffer.get(), new_size ) );
+        }
+
+        inline basic_string & operator += ( const basic_string & _right )
+        {
+            *this = *this + _right;
             return *this;
         }
 
